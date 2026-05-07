@@ -18,39 +18,111 @@ class UserLocalDataSource {
 
   Future<void> _ensureMemoryLoaded() async {
     if (_isMemoryLoaded) {
+      debugPrint('[UserLocalDataSource] Memory already loaded (${_memoryUsers.length} users in memory)');
       return;
     }
 
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_usersCacheKey);
-    final idCounter = prefs.getInt(_usersIdCounterKey);
-    if (idCounter != null && idCounter > 0) {
-      _memoryIdCounter = idCounter;
-    }
-
-    if (raw != null && raw.isNotEmpty) {
-      try {
-        final decoded = jsonDecode(raw) as List<dynamic>;
-        for (final item in decoded) {
-          final map = (item as Map).cast<String, dynamic>();
-          final user = UserModel.fromJson(map);
-          if (user.id != null) {
-            _memoryUsers[user.id!] = user;
-          }
-        }
-      } catch (_) {
-        // Ignore corrupt cache and continue with fresh memory map.
+    debugPrint('[UserLocalDataSource] Starting memory load from SharedPreferences...');
+    
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      
+      // Show all keys in SharedPreferences for debugging
+      final allKeys = prefs.getKeys();
+      debugPrint('[UserLocalDataSource] All SharedPreferences keys: $allKeys');
+      
+      final raw = prefs.getString(_usersCacheKey);
+      final idCounter = prefs.getInt(_usersIdCounterKey);
+      
+      debugPrint('[UserLocalDataSource] SharedPreferences raw data: ${raw != null ? "found (${raw.length} chars)" : "NOT FOUND"}');
+      debugPrint('[UserLocalDataSource] SharedPreferences key $_usersCacheKey exists: ${prefs.containsKey(_usersCacheKey)}');
+      debugPrint('[UserLocalDataSource] ID Counter from prefs: $idCounter');
+      
+      if (idCounter != null && idCounter > 0) {
+        _memoryIdCounter = idCounter;
+        debugPrint('[UserLocalDataSource] Set memory ID counter to: $_memoryIdCounter');
       }
-    }
 
-    _isMemoryLoaded = true;
+      if (raw != null && raw.isNotEmpty) {
+        try {
+          debugPrint('[UserLocalDataSource] Decoding JSON from SharedPreferences...');
+          final decoded = jsonDecode(raw) as List<dynamic>;
+          debugPrint('[UserLocalDataSource] Decoded ${decoded.length} users from JSON');
+          
+          for (final item in decoded) {
+            final map = (item as Map).cast<String, dynamic>();
+            final user = UserModel.fromJson(map);
+            if (user.id != null) {
+              _memoryUsers[user.id!] = user;
+              debugPrint('[UserLocalDataSource]   - Loaded user: id=${user.id}, username=${user.username}');
+            }
+          }
+          debugPrint('[UserLocalDataSource] ✓ Loaded ${_memoryUsers.length} users from SharedPreferences cache');
+        } catch (e) {
+          debugPrint('[UserLocalDataSource] ✗ ERROR decoding SharedPreferences cache: $e');
+          debugPrint('[UserLocalDataSource] Raw data: $raw');
+        }
+      } else {
+        debugPrint('[UserLocalDataSource] No cached users found in SharedPreferences');
+        debugPrint('[UserLocalDataSource] ⚠ This may be normal on first run, OR indicate persistence issue (e.g., private browsing)');
+        if (kIsWeb) {
+          debugPrint('[UserLocalDataSource] Web storage is tied to the browser origin.');
+          debugPrint('[UserLocalDataSource] Use the same web hostname and port on every run, for example:');
+          debugPrint('[UserLocalDataSource] flutter run -d chrome --web-hostname 127.0.0.1 --web-port 5000');
+        }
+      }
+
+      _isMemoryLoaded = true;
+      debugPrint('[UserLocalDataSource] Memory load complete. Total users in memory: ${_memoryUsers.length}');
+    } catch (e) {
+      debugPrint('[UserLocalDataSource] ✗ ERROR in _ensureMemoryLoaded: $e');
+      _isMemoryLoaded = true;
+    }
   }
 
   Future<void> _saveMemoryToPrefs() async {
-    final prefs = await SharedPreferences.getInstance();
-    final users = _memoryUsers.values.map((e) => e.toJson()).toList();
-    await prefs.setString(_usersCacheKey, jsonEncode(users));
-    await prefs.setInt(_usersIdCounterKey, _memoryIdCounter);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final users = _memoryUsers.values.map((e) => e.toJson()).toList();
+      final encoded = jsonEncode(users);
+      
+      debugPrint('[UserLocalDataSource] Saving ${users.length} users to SharedPreferences (${encoded.length} chars)');
+      debugPrint('[UserLocalDataSource] Saving ID counter: $_memoryIdCounter');
+      
+      try {
+        final success1 = await prefs.setString(_usersCacheKey, encoded);
+        debugPrint('[UserLocalDataSource] setString result: $success1');
+        
+        final success2 = await prefs.setInt(_usersIdCounterKey, _memoryIdCounter);
+        debugPrint('[UserLocalDataSource] setInt result: $success2');
+        
+        if (!success1 || !success2) {
+          debugPrint('[UserLocalDataSource] ⚠ WARNING: setString or setInt returned false!');
+        }
+        
+        // Verify write was successful
+        final verification = prefs.getString(_usersCacheKey);
+        if (verification != null && verification.isNotEmpty) {
+          debugPrint('[UserLocalDataSource] ✓ Verified: Data successfully written to SharedPreferences');
+          debugPrint('[UserLocalDataSource] Verification length: ${verification.length} chars');
+        } else {
+          debugPrint('[UserLocalDataSource] ✗ CRITICAL: Could not verify SharedPreferences write!');
+          debugPrint('[UserLocalDataSource] Data was NOT persisted to SharedPreferences!');
+          debugPrint('[UserLocalDataSource] This is likely a browser/platform issue:');
+          debugPrint('[UserLocalDataSource]   - Private browsing mode?');
+          debugPrint('[UserLocalDataSource]   - localStorage disabled?');
+          debugPrint('[UserLocalDataSource]   - Browser quota exceeded?');
+        }
+        
+      } catch (writeError) {
+        debugPrint('[UserLocalDataSource] ✗ CRITICAL ERROR during write: $writeError');
+        debugPrint('[UserLocalDataSource] Stack trace: ${writeError.toString()}');
+      }
+      
+    } catch (e) {
+      debugPrint('[UserLocalDataSource] ✗ ERROR getting SharedPreferences instance: $e');
+      debugPrint('[UserLocalDataSource] ⚠ This indicates SharedPreferences is not available on this platform');
+    }
   }
 
   /// Migrate any users cached in SharedPreferences memory into SQLite DB.
@@ -138,34 +210,46 @@ class UserLocalDataSource {
         createdAt: DateTime.now().toIso8601String(),
       );
       _memoryUsers[id] = storedUser;
+      debugPrint('[UserLocalDataSource] Added user to memory: id=$id, username=${user.username}');
+      debugPrint('[UserLocalDataSource] Total users in memory now: ${_memoryUsers.length}');
+      
       await _saveMemoryToPrefs();
+      debugPrint('[UserLocalDataSource] ✓ User created (web memory): id=$id, username=${user.username}');
       return storedUser;
     }
 
     try {
       final db = await _databaseService.database;
+      final createdAt = DateTime.now().toIso8601String();
+      final insertData = {
+        'username': user.username,
+        'password': user.password,
+        'role': user.role,
+        'photo': user.photo,
+        'createdAt': createdAt,
+        'level': user.level ?? 1,
+        'xp': user.xp ?? 0,
+      };
+      
+      debugPrint('[UserLocalDataSource] Inserting user to SQLite: $insertData');
       final id = await db.insert(
         'users',
-        {
-          'username': user.username,
-          'password': user.password,
-          'role': user.role,
-          'photo': user.photo,
-          'createdAt': DateTime.now().toIso8601String(),
-          'level': user.level,
-          'xp': user.xp,
-        },
+        insertData,
       );
-      return user.copyWith(id: id);
-    } catch (_) {
-      final id = _memoryIdCounter++;
-      final storedUser = user.copyWith(
-        id: id,
-        createdAt: DateTime.now().toIso8601String(),
-      );
-      _memoryUsers[id] = storedUser;
-      await _saveMemoryToPrefs();
-      return storedUser;
+      debugPrint('[UserLocalDataSource] ✓ User successfully created in SQLite: id=$id, username=${user.username}');
+      
+      final savedUser = user.copyWith(id: id, createdAt: createdAt);
+      
+      // Also cache in memory for quick access
+      _memoryUsers[id] = savedUser;
+      
+      return savedUser;
+    } catch (e) {
+      debugPrint('[UserLocalDataSource] ✗ ERROR creating user in SQLite: $e');
+      debugPrint('[UserLocalDataSource] Falling back to in-memory storage (NOT PERSISTENT!)');
+      
+      // Re-throw to let caller know about the failure
+      rethrow;
     }
   }
 
@@ -179,14 +263,23 @@ class UserLocalDataSource {
 
     try {
       final db = await _databaseService.database;
+      debugPrint('[UserLocalDataSource] Querying SQLite for user ID: $id');
+      
       final result = await db.query(
         'users',
         where: 'id = ?',
         whereArgs: [id],
       );
-      if (result.isEmpty) return null;
+      
+      if (result.isEmpty) {
+        debugPrint('[UserLocalDataSource] ✗ User NOT found in SQLite: id=$id');
+        return _memoryUsers[id];
+      }
+      
+      debugPrint('[UserLocalDataSource] ✓ User found in SQLite: id=$id');
       return UserModel.fromJson(result.first);
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[UserLocalDataSource] ✗ ERROR querying SQLite by ID: $e');
       return _memoryUsers[id];
     }
   }
@@ -196,11 +289,18 @@ class UserLocalDataSource {
     await _ensureMemoryLoaded();
 
     UserModel? findInMemory() {
+      debugPrint('[UserLocalDataSource] Searching in memory for username: $username (${_memoryUsers.length} users in memory)');
+      
       for (final user in _memoryUsers.values) {
+        debugPrint('[UserLocalDataSource]   - Checking user: ${user.username}');
         if (user.username == username) {
+          debugPrint('[UserLocalDataSource] ✓ User found in memory: $username');
           return user;
         }
       }
+      
+      debugPrint('[UserLocalDataSource] ✗ User NOT found in memory: $username');
+      debugPrint('[UserLocalDataSource] Available usernames in memory: ${_memoryUsers.values.map((u) => u.username).toList()}');
       return null;
     }
 
@@ -210,14 +310,24 @@ class UserLocalDataSource {
 
     try {
       final db = await _databaseService.database;
+      debugPrint('[UserLocalDataSource] Querying SQLite for user: $username');
+      
       final result = await db.query(
         'users',
         where: 'username = ?',
         whereArgs: [username],
       );
-      if (result.isEmpty) return null;
+      
+      if (result.isEmpty) {
+        debugPrint('[UserLocalDataSource] ✗ User NOT found in SQLite: $username');
+        debugPrint('[UserLocalDataSource] Memory users count: ${_memoryUsers.length}');
+        return findInMemory();
+      }
+      
+      debugPrint('[UserLocalDataSource] ✓ User found in SQLite: $username (id=${result.first['id']})');
       return UserModel.fromJson(result.first);
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[UserLocalDataSource] ✗ ERROR querying SQLite: $e');
       return findInMemory();
     }
   }

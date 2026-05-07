@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../data/models/user_model.dart';
 import '../../data/repositories/user_repository.dart';
@@ -26,13 +27,25 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
+      debugPrint('[AuthProvider] Starting registration for user: $username');
+      
       final hashedPassword = PasswordHashing.hashPassword(password);
       await _userRepository.registerUser(username, hashedPassword, role: role);
       
+      debugPrint('[AuthProvider] ✓ User registered successfully: $username');
+      
       // Auto login after registration
-      await login(username, password);
-      return true;
+      final loginSuccess = await login(username, password);
+      
+      if (loginSuccess) {
+        debugPrint('[AuthProvider] ✓ Auto-login successful after registration');
+      } else {
+        debugPrint('[AuthProvider] ✗ Auto-login failed after registration');
+      }
+      
+      return loginSuccess;
     } catch (e) {
+      debugPrint('[AuthProvider] ✗ Registration error: $e');
       _error = e.toString();
       notifyListeners();
       return false;
@@ -49,9 +62,13 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
+      debugPrint('[AuthProvider] Starting login for user: $username');
+      
       final hashedPassword = PasswordHashing.hashPassword(password);
       final user = await _userRepository.loginUser(username, hashedPassword);
+      
       _currentUser = user;
+      debugPrint('[AuthProvider] ✓ Login successful: $username (id=${user.id})');
 
       // Save to SharedPreferences
       final prefs = await SharedPreferences.getInstance();
@@ -59,9 +76,12 @@ class AuthProvider extends ChangeNotifier {
       await prefs.setString('username', user.username);
       await prefs.setString('role', user.role);
       await prefs.setBool('is_logged_in', true);
+      
+      debugPrint('[AuthProvider] ✓ Session saved to SharedPreferences');
 
       return true;
     } catch (e) {
+      debugPrint('[AuthProvider] ✗ Login error: $e');
       _error = e.toString();
       notifyListeners();
       return false;

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'package:dio/dio.dart';
@@ -51,27 +52,46 @@ import 'notifications/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Initialize database and verify integrity before starting UI
+
+  if (kIsWeb) {
+    _logWebStorageOrigin();
+  }
+
   final databaseService = DatabaseService();
-  final healthy = await databaseService.ensureHealthy();
-  if (!healthy) {
-    // If integrity check fails, try opening once more to let onUpgrade run, otherwise continue with caution.
+
+  if (!kIsWeb) {
+    // Initialize database and verify integrity before starting UI.
+    final healthy = await databaseService.ensureHealthy();
+    if (!healthy) {
+      // If integrity check fails, try opening once more to let onUpgrade run.
+      try {
+        await databaseService.database;
+      } catch (_) {
+        // Log and continue. UI will still run but DB operations should be guarded.
+      }
+    }
+
+    // Migrate any cached users into SQLite before launching UI.
     try {
-      await databaseService.database;
+      final userLocal = UserLocalDataSource(databaseService);
+      await userLocal.migratePrefsToDb();
     } catch (_) {
-      // Log and continue. UI will still run but DB operations should be guarded.
+      // Ignore migration failures.
     }
   }
 
-  // Migrate any cached users into SQLite before launching UI
-  try {
-    final userLocal = UserLocalDataSource(databaseService);
-    await userLocal.migratePrefsToDb();
-  } catch (_) {
-    // ignore migration failures
-  }
-
   runApp(MyApp(databaseService: databaseService));
+}
+
+void _logWebStorageOrigin() {
+  final origin = Uri.base.origin;
+  debugPrint('[WebStorage] Running on origin: $origin');
+
+  if (Uri.base.port != 5000) {
+    debugPrint('[WebStorage] WARNING: Flutter Web storage is separated by hostname and port.');
+    debugPrint('[WebStorage] Current port is ${Uri.base.port}, so previous data from another port will not be visible.');
+    debugPrint('[WebStorage] Run with: flutter run -d chrome --web-hostname 127.0.0.1 --web-port 5000');
+  }
 }
 
 class MyApp extends StatelessWidget {
