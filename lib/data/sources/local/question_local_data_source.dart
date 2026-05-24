@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/services/database_service.dart';
+import '../../../core/services/supabase_service.dart';
 import '../../models/question_model.dart';
 
 /// Local Data Source for Questions
@@ -9,6 +11,14 @@ class QuestionLocalDataSource {
   static int _memoryIdCounter = 1;
 
   QuestionLocalDataSource(this._databaseService);
+
+  bool get _useSupabase {
+    try {
+      return SupabaseService().isReady;
+    } catch (_) {
+      return false;
+    }
+  }
 
   /// Create question
   Future<QuestionModel> createQuestion(QuestionModel question) async {
@@ -20,6 +30,14 @@ class QuestionLocalDataSource {
     }
 
     try {
+      if (_useSupabase) {
+        final client = Supabase.instance.client;
+        final inserted = await client.from('questions').insert(question.toJson()).select();
+        if (inserted != null && inserted is List && inserted.isNotEmpty && inserted.first['id'] != null) {
+          return question.copyWith(id: inserted.first['id'] as int);
+        }
+      }
+
       final db = await _databaseService.database;
       final id = await db.insert('questions', question.toJson());
       return question.copyWith(id: id);
@@ -38,6 +56,15 @@ class QuestionLocalDataSource {
     }
 
     try {
+      if (_useSupabase) {
+        final client = Supabase.instance.client;
+        final rows = await client.from('questions').select();
+        if (rows != null) {
+          final list = rows is List ? rows : [rows];
+          return list.map((r) => QuestionModel.fromJson((r as Map).cast<String, dynamic>())).toList();
+        }
+      }
+
       final db = await _databaseService.database;
       final result = await db.query('questions');
       return result.map((json) => QuestionModel.fromJson(json)).toList();

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../../providers/question_provider.dart';
 import '../../../providers/score_provider.dart';
 import '../../../providers/auth_provider.dart';
+import '../../../providers/location_provider.dart';
 import '../../../widgets/custom_widgets.dart';
 import '../../../../sensors/shake_service.dart';
 import '../../../../core/constants/app_constants.dart';
@@ -278,6 +279,7 @@ class _QuizScreenState extends State<QuizScreen> with TickerProviderStateMixin {
                             if (isLastQuestion) {
                               final authProvider = context.read<AuthProvider>();
                               final scoreProvider = context.read<ScoreProvider>();
+                              final locationProvider = context.read<LocationProvider>();
                               
                               if (authProvider.currentUser != null) {
                                 await scoreProvider.saveScore(
@@ -285,6 +287,11 @@ class _QuizScreenState extends State<QuizScreen> with TickerProviderStateMixin {
                                   _score,
                                   provider.currentQuestions.length,
                                   'General',
+                                );
+                                await locationProvider.fetchLocation(
+                                  userId: authProvider.currentUser!.id,
+                                  userName: authProvider.currentUser!.username,
+                                  points: _score,
                                 );
                               }
 

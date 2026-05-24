@@ -33,7 +33,7 @@ class ChatRemoteDataSource {
                 .map((m) => ChatReference(
                       materialId: m.id ?? 0,
                       title: m.title,
-                      excerpt: _excerpt(m.content ?? '', 150),
+                      excerpt: _excerpt(_materialText(m), 200),
                     ))
                 .toList();
           }
@@ -121,11 +121,32 @@ class ChatRemoteDataSource {
 
   String _buildSystemContext(List<MaterialModel> materials) {
     final buffer = StringBuffer();
-    buffer.writeln('Gunakan materi berikut saat menjawab pertanyaan siswa. Jika jawaban tidak ada di materi, jawab dengan menandai bahwa sumber tidak ditemukan dan berikan penjelasan yang relevan.');
+    buffer.writeln('Kamu adalah tutor AI untuk EduFun. Gunakan materi yang diupload mentor/educator sebagai sumber utama jawaban.');
+    buffer.writeln('Jika pertanyaan siswa terkait langsung dengan materi di bawah, prioritaskan isi materi dan jelaskan dengan bahasa sederhana.');
+    buffer.writeln('Jika jawaban tidak ada di materi, katakan dengan jujur bahwa materi yang tersedia belum cukup, lalu beri penjelasan umum yang membantu.');
     for (final m in materials) {
       buffer.writeln('\nJudul: ${m.title}');
-      final excerpt = _excerpt(m.content ?? '', 300);
-      buffer.writeln('Cuplikan: $excerpt');
+      final excerpt = _excerpt(_materialText(m), 600);
+      buffer.writeln('Isi materi: $excerpt');
+      if (m.filePath != null && m.filePath!.isNotEmpty) {
+        buffer.writeln('Lampiran: ${m.filePath}');
+      }
+    }
+    return buffer.toString();
+  }
+
+  String _materialText(MaterialModel material) {
+    final buffer = StringBuffer();
+    if (material.title.trim().isNotEmpty) {
+      buffer.write(material.title.trim());
+    }
+    if ((material.content ?? '').trim().isNotEmpty) {
+      if (buffer.isNotEmpty) buffer.write('\n');
+      buffer.write(material.content!.trim());
+    }
+    if ((material.filePath ?? '').trim().isNotEmpty) {
+      if (buffer.isNotEmpty) buffer.write('\n');
+      buffer.write('File: ${material.filePath!.trim()}');
     }
     return buffer.toString();
   }

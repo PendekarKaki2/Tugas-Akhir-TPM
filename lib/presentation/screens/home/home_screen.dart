@@ -22,6 +22,12 @@ class _HomeScreenState extends State<HomeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       context.read<QuestionProvider>().initialize();
+      final auth = context.read<AuthProvider>();
+      context.read<LocationProvider>().fetchLocation(
+            userId: auth.currentUser?.id,
+            userName: auth.currentUser?.username,
+            points: auth.currentUser?.xp ?? 0,
+          );
     });
   }
 
@@ -121,8 +127,9 @@ class _HomeScreenState extends State<HomeScreen> {
               GridView(
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 2,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 10,
+                  mainAxisSpacing: 10,
+                  childAspectRatio: 1.45,
                 ),
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
@@ -295,12 +302,13 @@ class _FeatureCard extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, size: 48, color: color),
-          const SizedBox(height: 12),
+          Icon(icon, size: 34, color: color),
+          const SizedBox(height: 8),
           Text(
             title,
             style: const TextStyle(
               fontWeight: FontWeight.bold,
+              fontSize: 13,
             ),
           ),
         ],
@@ -318,8 +326,9 @@ class _CategoryBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Chip(
-      avatar: Icon(icon, size: 16),
+      avatar: Icon(icon, size: 14),
       label: Text(label),
+      labelStyle: const TextStyle(fontSize: 12),
       side: const BorderSide(color: Color(0xFFD1D5DB)),
       backgroundColor: const Color(0xFFF8FAFC),
     );

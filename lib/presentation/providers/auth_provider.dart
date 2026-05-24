@@ -19,6 +19,43 @@ class AuthProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get error => _error;
   bool get isLoggedIn => _currentUser != null;
+  bool get isPremium => _currentUser?.isPremium ?? false;
+
+  DateTime? _readMembershipExpiry(SharedPreferences prefs) {
+    final raw = prefs.getString('membership_valid_until');
+    if (raw == null || raw.isEmpty) return null;
+    return DateTime.tryParse(raw);
+  }
+
+  Future<void> _syncMembershipState(UserModel? user, SharedPreferences prefs) async {
+    if (user == null) return;
+
+    final expiry = _readMembershipExpiry(prefs);
+    final now = DateTime.now();
+    final hasExpiry = expiry != null;
+    final isExpired = hasExpiry && now.isAfter(expiry!);
+    final activeFromStorage = prefs.getBool('is_premium') ?? user.isPremium;
+    final shouldBePremium = isExpired ? false : activeFromStorage;
+
+    if (isExpired) {
+      await prefs.setBool('is_premium', false);
+      await prefs.remove('membership_plan_code');
+      await prefs.remove('membership_payment_method');
+      await prefs.remove('membership_receipt_id');
+      await prefs.remove('membership_purchased_at');
+      await prefs.remove('membership_valid_until');
+    } else {
+      await prefs.setBool('is_premium', shouldBePremium);
+    }
+
+    if (user.isPremium != shouldBePremium) {
+      final updatedUser = user.copyWith(isPremium: shouldBePremium);
+      await _userRepository.updateUser(updatedUser);
+      _currentUser = updatedUser;
+    } else {
+      _currentUser = user.copyWith(isPremium: shouldBePremium);
+    }
+  }
 
   /// Register new user
   Future<bool> register(String username, String password, {String role = 'student'}) async {
@@ -76,6 +113,8 @@ class AuthProvider extends ChangeNotifier {
       await prefs.setString('username', user.username);
       await prefs.setString('role', user.role);
       await prefs.setBool('is_logged_in', true);
+      await prefs.setBool('is_premium', user.isPremium);
+      await _syncMembershipState(_currentUser, prefs);
       
       debugPrint('[AuthProvider] ✓ Session saved to SharedPreferences');
 
@@ -98,6 +137,7 @@ class AuthProvider extends ChangeNotifier {
     
     if (userId != null) {
       _currentUser = await _userRepository.getUserById(userId);
+      await _syncMembershipState(_currentUser, prefs);
       notifyListeners();
     }
   }
@@ -120,6 +160,8 @@ class AuthProvider extends ChangeNotifier {
 
     _currentUser = user;
     await prefs.setBool('is_logged_in', true);
+    await prefs.setBool('is_premium', user.isPremium);
+    await _syncMembershipState(_currentUser, prefs);
     notifyListeners();
     return true;
   }
@@ -130,6 +172,7 @@ class AuthProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('is_logged_in', false);
     await prefs.remove('user_id');
+    await prefs.remove('is_premium');
     await prefs.remove('username');
     notifyListeners();
   }
@@ -143,6 +186,64 @@ class AuthProvider extends ChangeNotifier {
       await _userRepository.updateUser(updatedUser);
       _currentUser = updatedUser;
       notifyListeners();
+      return true;
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// Mark current user as premium and persist the status.
+  Future<bool> setPremiumStatus(bool value) async {
+    if (_currentUser == null) return false;
+
+    try {
+      final updatedUser = _currentUser!.copyWith(isPremium: value);
+      await _userRepository.updateUser(updatedUser);
+      _currentUser = updatedUser;
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('is_premium', value);
+      if (!value) {
+        await prefs.remove('membership_plan_code');
+        await prefs.remove('membership_payment_method');
+        await prefs.remove('membership_receipt_id');
+        await prefs.remove('membership_purchased_at');
+        await prefs.remove('membership_valid_until');
+      }
+
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// Store membership purchase metadata for the active user.
+  Future<bool> recordMembershipPurchase({
+    required String planCode,
+    required String paymentMethod,
+    required String receiptId,
+    required DateTime purchasedAt,
+    required DateTime? validUntil,
+  }) async {
+    if (_currentUser == null) return false;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('membership_plan_code', planCode);
+      await prefs.setString('membership_payment_method', paymentMethod);
+      await prefs.setString('membership_receipt_id', receiptId);
+      await prefs.setString('membership_purchased_at', purchasedAt.toIso8601String());
+      if (validUntil != null) {
+        await prefs.setString('membership_valid_until', validUntil.toIso8601String());
+      } else {
+        await prefs.remove('membership_valid_until');
+      }
+
       return true;
     } catch (e) {
       _error = e.toString();

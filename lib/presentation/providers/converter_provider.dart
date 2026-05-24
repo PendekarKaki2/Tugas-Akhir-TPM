@@ -57,20 +57,35 @@ class ConverterProvider extends ChangeNotifier {
     }
   }
 
-  /// Convert time (mock implementation)
-  Map<String, String> convertTime(String hour) {
+  /// Convert time between arbitrary timezone offsets.
+  ///
+  /// [sourceOffsetHours] and each target offset are expressed as hours from UTC.
+  /// For example, WIB = 7, WITA = 8, WIT = 9.
+  Map<String, String> convertTime({
+    required String hour,
+    required double sourceOffsetHours,
+    required Map<String, double> targetOffsets,
+  }) {
     final int h = int.tryParse(hour) ?? 12;
-    
-    // Assuming input is UTC (London time)
-    final wib = (h + 7) % 24; // WIB = UTC + 7
-    final wita = (h + 8) % 24; // WITA = UTC + 8
-    final wit = (h + 9) % 24; // WIT = UTC + 9
-    
-    return {
-      'London': '$h:00',
-      'WIB': '$wib:00',
-      'WITA': '$wita:00',
-      'WIT': '$wit:00',
-    };
+    final normalizedHour = h.clamp(0, 23);
+
+    final baseUtc = DateTime.utc(2000, 1, 1, normalizedHour);
+    final sourceOffset = Duration(minutes: (sourceOffsetHours * 60).round());
+    final utcTime = baseUtc.subtract(sourceOffset);
+
+    final result = <String, String>{};
+    for (final entry in targetOffsets.entries) {
+      final targetOffset = Duration(minutes: (entry.value * 60).round());
+      final local = utcTime.add(targetOffset);
+      final dayShift = local.day - baseUtc.day;
+      final suffix = dayShift == 0
+          ? ''
+          : dayShift > 0
+              ? ' (+$dayShift hari)'
+              : ' (${dayShift} hari)';
+      result[entry.key] = '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}$suffix';
+    }
+
+    return result;
   }
 }

@@ -12,7 +12,7 @@ class NotificationService {
 
     const android = AndroidInitializationSettings('@mipmap/ic_launcher');
     const settings = InitializationSettings(android: android);
-    await _plugin.initialize(settings);
+    await _plugin.initialize(settings: settings);
   }
 
   Future<void> showDailyReminderNow() async {
@@ -31,10 +31,10 @@ class NotificationService {
     );
 
     await _plugin.show(
-      101,
-      'EduFun',
-      'Ayo belajar hari ini!',
-      details,
+      id: 101,
+      title: 'EduFun',
+      body: 'Ayo belajar hari ini!',
+      notificationDetails: details,
     );
   }
 }

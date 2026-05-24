@@ -12,46 +12,19 @@
 
 ### Langkah 2: Setup API Key di Project
 
-**Opsi A: Langsung di Code (Tidak Aman - Hanya untuk Testing)**
-```dart
-// lib/core/constants/api_constants.dart
-class ApiConstants {
-  static const String geminiApiKey = 'YOUR_GEMINI_API_KEY_HERE';
-  static const String geminiModel = 'gemini-2.0-flash';
-}
+Gunakan `dart-define` saat menjalankan app:
+
+```bash
+flutter run -d chrome --dart-define=GEMINI_API_KEY=your_api_key_here
 ```
 
-**Opsi B: Menggunakan Environment Variables (RECOMMENDED)**
+Atau saat build APK:
 
-1. Buat file `.env` di root project:
-```
-GEMINI_API_KEY=your_api_key_here
-```
-
-2. Update `pubspec.yaml`:
-```yaml
-dependencies:
-  flutter_dotenv: ^5.2.0
+```bash
+flutter build apk --dart-define=GEMINI_API_KEY=your_api_key_here
 ```
 
-3. Ubah `api_constants.dart`:
-```dart
-import 'package:flutter_dotenv/flutter_dotenv.dart';
-
-class ApiConstants {
-  static String get geminiApiKey => dotenv.env['GEMINI_API_KEY'] ?? '';
-  static const String geminiModel = 'gemini-2.0-flash';
-}
-```
-
-4. Update `main.dart`:
-```dart
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await dotenv.load();
-  runApp(const MyApp());
-}
-```
+Konstanta API sudah membaca nilai dari `String.fromEnvironment('GEMINI_API_KEY')`, jadi tidak perlu menulis key langsung di source code.
 
 ### Langkah 3: Install Dependencies
 
@@ -62,7 +35,7 @@ flutter pub get
 ### Langkah 4: Jalankan App
 
 ```bash
-flutter run
+flutter run -d chrome --dart-define=GEMINI_API_KEY=your_api_key_here
 ```
 
 ---
@@ -77,7 +50,7 @@ flutter run
    - Fallback jika API error
 
 2. **`lib/core/constants/api_constants.dart`**
-   - Konstanta API key dan model
+   - Konstanta model dan pembacaan API key via `dart-define`
    - Timeout settings
 
 3. **Updated `lib/data/sources/remote/chat_remote_data_source.dart`**
@@ -139,8 +112,8 @@ Gemini menyediakan beberapa model:
 ## 🔒 Security Best Practices
 
 1. **Jangan commit API key ke repository**
-   - Gunakan `.env` file dan tambahkan ke `.gitignore`
-   - Gunakan environment variables di production
+   - Gunakan `--dart-define` saat run/build
+   - Simpan key di secret manager atau CI secret untuk production
 
 2. **Rate Limiting**
    - Gemini punya rate limit, monitor usage
@@ -155,9 +128,9 @@ Gemini menyediakan beberapa model:
 ## 📊 Quota & Pricing
 
 **Free Tier:**
-- 60 requests per minute
-- Unlimited requests per day (dengan rate limit)
-- Semua model tersedia
+- Free quota tersedia untuk pengembangan
+- Model `gemini-2.0-flash` cocok untuk chatbot cepat dan hemat
+- Tetap ada rate limit, jadi gunakan secara wajar
 
 **Paid Tier:**
 - Higher rate limits
@@ -172,6 +145,7 @@ Cek lebih lanjut: https://ai.google.dev/pricing
 ### Error: "Invalid API Key"
 - Pastikan API key benar dan aktif
 - Regenerate API key jika perlu
+- Pastikan app dijalankan dengan `--dart-define=GEMINI_API_KEY=...`
 
 ### Error: "Rate limit exceeded"
 - Tunggu beberapa saat sebelum request lagi
@@ -185,6 +159,7 @@ Cek lebih lanjut: https://ai.google.dev/pricing
 - Check internet connection
 - Lihat logs untuk error message
 - Fallback response akan di-return
+- Kalau belum set key, app akan menampilkan pesan konfigurasi Gemini
 
 ---
 

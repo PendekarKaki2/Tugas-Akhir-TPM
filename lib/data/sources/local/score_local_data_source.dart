@@ -1,6 +1,16 @@
 import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/services/database_service.dart';
+import '../../../core/services/supabase_service.dart';
 import '../../models/score_model.dart';
+
+bool _useSupabaseGlobal() {
+  try {
+    return SupabaseService().isReady;
+  } catch (_) {
+    return false;
+  }
+}
 
 /// Local Data Source for Scores
 class ScoreLocalDataSource {
@@ -9,6 +19,8 @@ class ScoreLocalDataSource {
   static int _memoryIdCounter = 1;
 
   ScoreLocalDataSource(this._databaseService);
+
+  bool get _useSupabase => _useSupabaseGlobal();
 
   /// Create score
   Future<ScoreModel> createScore(ScoreModel score) async {
@@ -20,6 +32,20 @@ class ScoreLocalDataSource {
     }
 
     try {
+      if (_useSupabase) {
+        final client = Supabase.instance.client;
+        final inserted = await client.from('scores').insert({
+          'userId': score.userId,
+          'score': score.score,
+          'totalQuestions': score.totalQuestions,
+          'category': score.category,
+          'timestamp': DateTime.now().toIso8601String(),
+        }).select();
+        if (inserted != null && inserted is List && inserted.isNotEmpty && inserted.first['id'] != null) {
+          return score.copyWith(id: inserted.first['id'] as int);
+        }
+      }
+
       final db = await _databaseService.database;
       final id = await db.insert(
         'scores',
@@ -47,6 +73,15 @@ class ScoreLocalDataSource {
     }
 
     try {
+      if (_useSupabase) {
+        final client = Supabase.instance.client;
+        final rows = await client.from('scores').select().eq('userId', userId).order('timestamp', ascending: false);
+        if (rows != null) {
+          final list = rows is List ? rows : [rows];
+          return list.map((r) => ScoreModel.fromJson((r as Map).cast<String, dynamic>())).toList();
+        }
+      }
+
       final db = await _databaseService.database;
       final result = await db.query(
         'scores',
@@ -68,6 +103,17 @@ class ScoreLocalDataSource {
 
   /// Get top scores (leaderboard)
   Future<List<ScoreModel>> getTopScores(int limit) async {
+    if (_useSupabase) {
+      try {
+        final client = Supabase.instance.client;
+        final rows = await client.from('scores').select().order('score', ascending: false).limit(limit);
+        if (rows != null) {
+          final list = rows is List ? rows : [rows];
+          return list.map((r) => ScoreModel.fromJson((r as Map).cast<String, dynamic>())).toList();
+        }
+      } catch (_) {}
+    }
+
     final scores = _memoryScores.values.toList();
     final sorted = List<ScoreModel>.from(scores)..sort((a, b) => b.score.compareTo(a.score));
     return sorted.take(limit).toList();

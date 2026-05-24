@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import 'core/constants/app_constants.dart';
 import 'core/theme/app_theme.dart';
 import 'core/services/database_service.dart';
+import 'core/services/supabase_service.dart';
 import 'core/services/location_service.dart';
 import 'core/services/biometric_service.dart';
 import 'core/services/gemini_service.dart';
@@ -14,6 +15,7 @@ import 'data/repositories/material_repository.dart';
 import 'data/repositories/quiz_repository.dart';
 import 'data/repositories/question_repository.dart';
 import 'data/repositories/score_repository.dart';
+import 'data/repositories/user_location_repository.dart';
 import 'data/repositories/chat_repository.dart';
 import 'data/repositories/converter_repository.dart';
 import 'data/sources/local/user_local_data_source.dart';
@@ -21,6 +23,7 @@ import 'data/sources/local/material_local_data_source.dart';
 import 'data/sources/local/quiz_local_data_source.dart';
 import 'data/sources/local/question_local_data_source.dart';
 import 'data/sources/local/score_local_data_source.dart';
+import 'data/sources/local/user_location_local_data_source.dart';
 import 'data/sources/remote/chat_remote_data_source.dart';
 import 'data/sources/remote/converter_remote_data_source.dart';
 import 'presentation/providers/auth_provider.dart';
@@ -39,6 +42,8 @@ import 'presentation/screens/game/quiz/quiz_screen.dart';
 import 'presentation/screens/game/tebak_gambar/tebak_gambar_screen.dart';
 import 'presentation/screens/chatbot/chatbot_screen.dart';
 import 'presentation/screens/converter/converter_screen.dart';
+import 'presentation/screens/game/quiz_minigame_screen.dart';
+import 'presentation/screens/profile/membership_screen.dart';
 import 'presentation/screens/profile/profile_screen.dart';
 import 'presentation/screens/leaderboard/leaderboard_screen.dart';
 import 'presentation/screens/feedback/feedback_screen.dart';
@@ -56,6 +61,10 @@ void main() async {
   if (kIsWeb) {
     _logWebStorageOrigin();
   }
+
+  // Initialize Supabase (if configured)
+  final supa = SupabaseService();
+  await supa.init();
 
   final databaseService = DatabaseService();
 
@@ -122,6 +131,7 @@ class MyApp extends StatelessWidget {
     final quizLocalDataSource = QuizLocalDataSource(databaseService);
     final questionLocalDataSource = QuestionLocalDataSource(databaseService);
     final scoreLocalDataSource = ScoreLocalDataSource(databaseService);
+    final userLocationLocalDataSource = UserLocationLocalDataSource(databaseService);
     final chatRemoteDataSource = ChatRemoteDataSource(geminiService, materialLocalDataSource);
     final converterRemoteDataSource = ConverterRemoteDataSource(dio);
 
@@ -131,6 +141,7 @@ class MyApp extends StatelessWidget {
     final quizRepository = QuizRepository(quizLocalDataSource);
     final questionRepository = QuestionRepository(questionLocalDataSource);
     final scoreRepository = ScoreRepository(scoreLocalDataSource);
+    final userLocationRepository = UserLocationRepository(userLocationLocalDataSource);
     final chatRepository = ChatRepository(chatRemoteDataSource);
     final converterRepository = ConverterRepository(converterRemoteDataSource);
     final locationService = LocationService();
@@ -166,7 +177,7 @@ class MyApp extends StatelessWidget {
           create: (_) => ThemeProvider(),
         ),
         ChangeNotifierProvider(
-          create: (_) => LocationProvider(locationService),
+          create: (_) => LocationProvider(locationService, userLocationRepository),
         ),
         Provider<BiometricService>.value(value: biometricService),
         Provider<NotificationService>.value(value: notificationService),
@@ -201,6 +212,8 @@ class MyApp extends StatelessWidget {
                   const TebakGambarScreen(),
               AppNavigation.chatbot: (context) => const ChatbotScreen(),
               AppNavigation.converter: (context) => const ConverterScreen(),
+              AppNavigation.quizMinigame: (context) => const QuizMinigameScreen(),
+              AppNavigation.membership: (context) => const MembershipScreen(),
               AppNavigation.profile: (context) => const ProfileScreen(),
               AppNavigation.leaderboard: (context) =>
                   const LeaderboardScreen(),

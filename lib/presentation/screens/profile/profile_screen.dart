@@ -81,6 +81,16 @@ class ProfileScreen extends StatelessWidget {
                 onTap: () {},
               ),
               _MenuTile(
+                icon: Icons.card_membership,
+                title: 'Membership',
+                onTap: () => Navigator.pushNamed(context, AppNavigation.membership),
+              ),
+              _MenuTile(
+                icon: Icons.videogame_asset,
+                title: 'Minigame Quiz',
+                onTap: () => Navigator.pushNamed(context, AppNavigation.quizMinigame),
+              ),
+              _MenuTile(
                 icon: Icons.help,
                 title: 'Help & Support',
                 onTap: () {},

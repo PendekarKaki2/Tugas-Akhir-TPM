@@ -39,7 +39,7 @@ class DatabaseService {
         
         final db = await openDatabase(
           path,
-          version: 3,
+          version: 5,
           onCreate: _onCreate,
           onUpgrade: _onUpgrade,
           onOpen: _onOpen,
@@ -102,7 +102,8 @@ class DatabaseService {
           photo TEXT,
           createdAt TEXT NOT NULL,
           level INTEGER DEFAULT 1,
-          xp INTEGER DEFAULT 0
+          xp INTEGER DEFAULT 0,
+          isPremium INTEGER DEFAULT 0
         )
       ''');
       debugPrint('[DatabaseService] ✓ Created table: users');
@@ -153,8 +154,11 @@ class DatabaseService {
         CREATE TABLE user_locations (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           userId INTEGER NOT NULL,
+          userName TEXT NOT NULL,
           latitude REAL NOT NULL,
           longitude REAL NOT NULL,
+          locationName TEXT NOT NULL,
+          points INTEGER DEFAULT 0,
           timestamp TEXT NOT NULL,
           FOREIGN KEY (userId) REFERENCES users(id)
         )
@@ -295,6 +299,34 @@ class DatabaseService {
         debugPrint('[DatabaseService] ✓ Added type column to quiz_questions');
       } catch (e) {
         debugPrint('[DatabaseService] ⚠ Could not add type column (may already exist): $e');
+      }
+    }
+    if (oldVersion < 4) {
+      debugPrint('[DatabaseService] Upgrading to version 4...');
+      try {
+        await db.execute("ALTER TABLE users ADD COLUMN isPremium INTEGER DEFAULT 0");
+        debugPrint('[DatabaseService] ✓ Added isPremium column to users');
+      } catch (e) {
+        debugPrint('[DatabaseService] ⚠ Could not add isPremium column (may already exist): $e');
+      }
+    }
+
+    if (oldVersion < 5) {
+      debugPrint('[DatabaseService] Upgrading to version 5...');
+      try {
+        await db.execute("ALTER TABLE user_locations ADD COLUMN userName TEXT DEFAULT 'Unknown'");
+      } catch (e) {
+        debugPrint('[DatabaseService] ⚠ Could not add userName column to user_locations: $e');
+      }
+      try {
+        await db.execute("ALTER TABLE user_locations ADD COLUMN locationName TEXT DEFAULT 'Unknown area'");
+      } catch (e) {
+        debugPrint('[DatabaseService] ⚠ Could not add locationName column to user_locations: $e');
+      }
+      try {
+        await db.execute('ALTER TABLE user_locations ADD COLUMN points INTEGER DEFAULT 0');
+      } catch (e) {
+        debugPrint('[DatabaseService] ⚠ Could not add points column to user_locations: $e');
       }
     }
     

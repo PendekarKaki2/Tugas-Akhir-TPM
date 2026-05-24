@@ -5,7 +5,7 @@ class PasswordHashing {
   /// Hash password using SHA-256
   static String hashPassword(String password) {
     return sha256.convert(password.codeUnits).toString();
-  }
+  } 
 
   /// Verify password against hash
   static bool verifyPassword(String password, String hash) {

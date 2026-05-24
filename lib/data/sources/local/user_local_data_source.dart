@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../core/services/supabase_service.dart';
 import '../../../core/services/database_service.dart';
 import '../../models/user_model.dart';
 
@@ -15,6 +17,14 @@ class UserLocalDataSource {
   static const String _usersIdCounterKey = 'cached_users_id_counter_v1';
 
   UserLocalDataSource(this._databaseService);
+
+  bool get _useSupabase {
+    try {
+      return SupabaseService().isReady;
+    } catch (_) {
+      return false;
+    }
+  }
 
   Future<void> _ensureMemoryLoaded() async {
     if (_isMemoryLoaded) {
@@ -132,6 +142,48 @@ class UserLocalDataSource {
     await _ensureMemoryLoaded();
 
     if (kIsWeb) return; // DB persistence not available on web in this app
+    // If Supabase is configured, migrate memory cache to remote Postgres first
+    if (_useSupabase) {
+      try {
+        final client = Supabase.instance.client;
+        final entries = _memoryUsers.entries.toList();
+        for (final e in entries) {
+          final memUser = e.value;
+          try {
+            final existing = await getUserByUsername(memUser.username);
+            if (existing != null && existing.id != null) {
+              _memoryUsers.remove(e.key);
+              _memoryUsers[existing.id!] = existing;
+              continue;
+            }
+
+            final inserted = await client.from('users').insert({
+              'username': memUser.username,
+              'password': memUser.password,
+              'role': memUser.role,
+              'photo': memUser.photo,
+              'createdAt': memUser.createdAt ?? DateTime.now().toIso8601String(),
+              'level': memUser.level,
+              'xp': memUser.xp,
+              'isPremium': memUser.isPremium ?? false,
+            }).select().maybeSingle();
+
+            if (inserted != null && inserted['id'] != null) {
+              final id = inserted['id'] as int;
+              final migrated = memUser.copyWith(id: id);
+              _memoryUsers.remove(e.key);
+              _memoryUsers[id] = migrated;
+            }
+          } catch (_) {
+            continue;
+          }
+        }
+        await _saveMemoryToPrefs();
+      } catch (_) {
+        // ignore
+      }
+      return;
+    }
 
     try {
       final db = await _databaseService.database;
@@ -160,6 +212,7 @@ class UserLocalDataSource {
             'createdAt': memUser.createdAt ?? DateTime.now().toIso8601String(),
             'level': memUser.level,
             'xp': memUser.xp,
+            'isPremium': memUser.isPremium ? 1 : 0,
           });
 
           final migrated = memUser.copyWith(id: id);
@@ -218,6 +271,37 @@ class UserLocalDataSource {
       return storedUser;
     }
 
+    // If Supabase configured, create user in remote Postgres
+    if (_useSupabase) {
+      try {
+        final client = Supabase.instance.client;
+        final createdAt = DateTime.now().toIso8601String();
+        final insertData = {
+          'username': user.username,
+          'password': user.password,
+          'role': user.role,
+          'photo': user.photo,
+          'createdAt': createdAt,
+          'level': user.level ?? 1,
+          'xp': user.xp ?? 0,
+          'isPremium': user.isPremium ?? false,
+        };
+
+        debugPrint('[UserLocalDataSource] Inserting user to Supabase: $insertData');
+        final inserted = await client.from('users').insert(insertData).select().maybeSingle();
+        if (inserted != null && inserted['id'] != null) {
+          final id = inserted['id'] as int;
+          final savedUser = user.copyWith(id: id, createdAt: createdAt);
+          _memoryUsers[id] = savedUser;
+          debugPrint('[UserLocalDataSource] ✓ User created in Supabase: id=$id, username=${user.username}');
+          return savedUser;
+        }
+      } catch (e) {
+        debugPrint('[UserLocalDataSource] ✗ Supabase create user failed: $e');
+        // fall through to SQLite path
+      }
+    }
+
     try {
       final db = await _databaseService.database;
       final createdAt = DateTime.now().toIso8601String();
@@ -229,6 +313,7 @@ class UserLocalDataSource {
         'createdAt': createdAt,
         'level': user.level ?? 1,
         'xp': user.xp ?? 0,
+        'isPremium': user.isPremium ? 1 : 0,
       };
       
       debugPrint('[UserLocalDataSource] Inserting user to SQLite: $insertData');
@@ -259,6 +344,16 @@ class UserLocalDataSource {
 
     if (kIsWeb) {
       return _memoryUsers[id];
+    }
+    // Try Supabase first if available
+    if (_useSupabase) {
+      try {
+        final client = Supabase.instance.client;
+        final res = await client.from('users').select().eq('id', id).maybeSingle();
+        if (res != null) return UserModel.fromJson(res as Map<String, dynamic>);
+      } catch (e) {
+        debugPrint('[UserLocalDataSource] ✗ Supabase getUserById failed: $e');
+      }
     }
 
     try {

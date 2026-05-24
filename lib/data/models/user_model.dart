@@ -8,6 +8,7 @@ class UserModel {
   final String? createdAt;
   final int level;
   final int xp;
+  final bool isPremium;
 
   UserModel({
     this.id,
@@ -18,6 +19,7 @@ class UserModel {
     this.createdAt,
     this.level = 1,
     this.xp = 0,
+    this.isPremium = false,
   });
 
   /// Convert to JSON
@@ -31,6 +33,7 @@ class UserModel {
       'createdAt': createdAt,
       'level': level,
       'xp': xp,
+      'isPremium': isPremium ? 1 : 0,
     };
   }
 
@@ -45,6 +48,13 @@ class UserModel {
       createdAt: json['createdAt'],
       level: json['level'] ?? 1,
       xp: json['xp'] ?? 0,
+      isPremium: (() {
+        final raw = json['isPremium'] ?? json['is_premium'];
+        if (raw is bool) return raw;
+        if (raw is int) return raw == 1;
+        if (raw is String) return raw.toLowerCase() == 'true' || raw == '1';
+        return false;
+      })(),
     );
   }
 
@@ -58,6 +68,7 @@ class UserModel {
     String? createdAt,
     int? level,
     int? xp,
+    bool? isPremium,
   }) {
     return UserModel(
       id: id ?? this.id,
@@ -68,6 +79,7 @@ class UserModel {
       createdAt: createdAt ?? this.createdAt,
       level: level ?? this.level,
       xp: xp ?? this.xp,
+      isPremium: isPremium ?? this.isPremium,
     );
   }
 }

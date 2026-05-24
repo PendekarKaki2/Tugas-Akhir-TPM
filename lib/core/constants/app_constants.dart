@@ -7,6 +7,11 @@ class AppConstants {
   // Database
   static const String databaseName = 'edufun.db';
   static const int databaseVersion = 1;
+  // Supabase (Postgres) - replace with your project values
+  static const String supabaseUrl = 'YOUR_SUPABASE_URL';
+  static const String supabaseAnonKey = 'YOUR_SUPABASE_ANON_KEY';
+  // Choose backend: 'sqlite' or 'supabase'
+  static const String databaseBackend = 'supabase';
 
   // Shared Preferences Keys
   static const String userIdKey = 'user_id';

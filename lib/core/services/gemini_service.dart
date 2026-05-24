@@ -11,6 +11,10 @@ class GeminiService {
   void initialize({String? apiKey}) {
     if (!_isInitialized) {
       final key = apiKey ?? ApiConstants.geminiApiKey;
+      if (key.trim().isEmpty) {
+        _isInitialized = false;
+        return;
+      }
       
       _model = GenerativeModel(
         model: ApiConstants.geminiModel,
@@ -28,6 +32,9 @@ class GeminiService {
     try {
       if (!_isInitialized) {
         initialize();
+        if (!_isInitialized) {
+          return 'Gemini API belum dikonfigurasi. Jalankan aplikasi dengan --dart-define=GEMINI_API_KEY=YOUR_KEY atau isi key Gemini di konfigurasi environment.';
+        }
       }
 
       // System prompt untuk membuat AI lebih fokus sebagai tutor
@@ -53,6 +60,9 @@ class GeminiService {
     try {
       if (!_isInitialized) {
         initialize();
+        if (!_isInitialized) {
+          return 'Gemini API belum dikonfigurasi. Jalankan aplikasi dengan --dart-define=GEMINI_API_KEY=YOUR_KEY atau isi key Gemini di konfigurasi environment.';
+        }
       }
 
       // Combine system context dengan user message
@@ -76,6 +86,7 @@ class GeminiService {
 
   /// Clear chat history
   void clearHistory() {
+    if (!_isInitialized) return;
     _chatSession = _model.startChat();
   }
 
